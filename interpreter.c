@@ -74,7 +74,6 @@ typedef struct pos_stack_node_s {
 } pos_stack_node_t;
 typedef struct {
     pos_stack_node_t *top;
-    unsigned int size;
 } pos_stack_t;
 
 pos_stack_t *new_pos_stack() {
@@ -84,7 +83,6 @@ pos_stack_t *new_pos_stack() {
         exit(1);
     }
     stack->top = NULL;
-    stack->size = 0;
     return stack;
 }
 
@@ -102,7 +100,6 @@ void push(pos_stack_t *stack, fpos_t *pos) {
     new_node->pos = pos;
     new_node->down = stack->top;
     stack->top = new_node;
-    stack->size++;
 }
 
 // Pop from the stack WITHOUT returning the value.
@@ -118,7 +115,6 @@ void pop(pos_stack_t *stack) {
 
     pos_stack_node_t *top = stack->top;
     stack->top = top->down;
-    stack->size--;
     free(top->pos);
     free(top);
 }
