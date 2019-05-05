@@ -5,7 +5,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdarg.h>
 #include <string.h>
 
 // symbolic constants for BF program characters
@@ -176,16 +175,6 @@ char read_char() {
     return c != EOF ? c : 0;
 }
 
-#define DEBUG 0
-// useful wrapper for debug print statements.
-void debug(const char *format, ...) {
-    if (DEBUG) {
-        va_list(args);
-        va_start(args, format);
-        vprintf(format, args);
-    }
-}
-
 int check_brackets(FILE* prog, char *error_msg) {
     int bracket_level = 0;
     for (int c = fgetc(prog); c != EOF; c = fgetc(prog)) {
@@ -242,36 +231,28 @@ void eval(FILE* prog) {
                 putchar(pos->val);
                 break;
             case OPEN:
-                debug("\nhit open bracket\n");
                 if (0 == pos->val) {
-                    debug("\njumping forward\n");
                     bracket_jump(prog);
                 } else  {
-                    debug("\ngetting current position\n");
                     fpos_t *curr_pos = malloc(sizeof(fpos_t));
                     if (NULL == curr_pos) {
                         fprintf(stderr, "Error allocating for fpos_t.\n");
                         exit(1);
                     }
                     fgetpos(prog, curr_pos);
-                    debug("\npushing current position\n");
                     push(pos_stack, curr_pos);
                 }
                 break;
             case CLOSE:
-                debug("\nhit closing bracket\n");
                 if (pos->val != 0) {
                     fpos_t *new_pos = peek(pos_stack);
-                    debug("\nsetting position backwards\n");
                     fsetpos(prog, new_pos);
                 } else {
-                    debug("\npopping from stack\n");
                     pop(pos_stack);
                 }
                 break;
         }
     }
-    debug("\npos_stack->size = %d\n", pos_stack->size);
     free_tape(pos);
     free_pos_stack(pos_stack);
 }
