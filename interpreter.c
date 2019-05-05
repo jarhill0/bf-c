@@ -105,7 +105,8 @@ void push(pos_stack_t *stack, fpos_t *pos) {
     stack->size++;
 }
 
-fpos_t *pop(pos_stack_t *stack) {
+// Pop from the stack WITHOUT returning the value.
+void pop(pos_stack_t *stack) {
     if (NULL == stack) {
         fprintf(stderr, "Cannot operate on null stack. Exiting.\n");
         exit(1);
@@ -116,11 +117,10 @@ fpos_t *pop(pos_stack_t *stack) {
     }
 
     pos_stack_node_t *top = stack->top;
-    fpos_t *retval = top->pos;
     stack->top = top->down;
     stack->size--;
+    free(top->pos);
     free(top);
-    return retval;
 }
 
 fpos_t *peek(pos_stack_t *stack) {
