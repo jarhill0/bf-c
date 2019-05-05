@@ -7,6 +7,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define USAGE "Usage: %s <program.bf> [-zon]\n" \
+    "Options:\n" \
+    "\t-z\tInput a zero on EOF (default behavior)\n" \
+    "\t-o\tInput a negative one on EOF\n" \
+    "\t-n\tDo nothing on EOF (preserve existing value)\n"
+
 // symbolic constants for BF program characters
 #define LEFT '<'
 #define RIGHT '>'
@@ -165,12 +171,6 @@ void bracket_jump(FILE* prog) {
     exit(1);
 }
 
-// Wrap getchar() to return 0 on EOF.
-char read_char() {
-    int c = getchar();
-    return c != EOF ? c : 0;
-}
-
 int check_brackets(FILE* prog, char *error_msg) {
     int bracket_level = 0;
     for (int c = fgetc(prog); c != EOF; c = fgetc(prog)) {
@@ -194,7 +194,13 @@ int check_brackets(FILE* prog, char *error_msg) {
     return 0 == bracket_level;
 }
 
-void eval(FILE* prog) {
+typedef enum {
+    ZERO,
+    NEG_ONE,
+    NOOP,
+} eof_mode_t;
+
+void eval(FILE* prog, eof_mode_t eof_mode) {
     {
         char error[100];
         if (!check_brackets(prog, error)) {
@@ -221,7 +227,23 @@ void eval(FILE* prog) {
                 pos->val--;
                 break;
             case INP:
-                pos->val = read_char();
+                {
+                    char inp = getchar();
+                    if (EOF == inp) {
+                        switch(eof_mode) {
+                            case ZERO:
+                                pos->val = 0;
+                                break;
+                            case NEG_ONE:
+                                pos->val = -1;
+                                break;
+                            case NOOP:
+                                break;
+                        }
+                    } else {
+                        pos->val = inp;
+                    }
+                }
                 break;
             case OUTP:
                 putchar(pos->val);
@@ -255,8 +277,23 @@ void eval(FILE* prog) {
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
-        fprintf(stderr, "Usage: %s [program.bf]\n", argv[0]);
+        fprintf(stderr, USAGE, argv[0]);
         return 1;
+    }
+
+    eof_mode_t eof_mode = ZERO;
+    for (int i = 2; i < argc; i++) {
+        if (strcmp(argv[i], "-z") == 0)
+            eof_mode = ZERO;
+        else if (strcmp(argv[i], "-o") == 0)
+            eof_mode = NEG_ONE;
+        else if (strcmp(argv[i], "-n") == 0)
+            eof_mode = NOOP;
+        else {
+            fprintf(stderr, "Unknown option '%s'\n", argv[i]);
+            fprintf(stderr, USAGE, argv[0]);
+            return 1;
+        }
     }
 
     FILE *program = fopen(argv[1], "r");
@@ -265,7 +302,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    eval(program);
+    eval(program, eof_mode);
 
     if (fclose(program)) {
         fprintf(stderr, "Error closing program file.\n");
