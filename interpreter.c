@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "abstract_file.h"
 
 #define USAGE "Usage: %s <program.bf> [-zon]\n" \
     "Options:\n" \
@@ -75,7 +76,7 @@ void free_tape(node_t *node) {
 
 // Represent a stack of file positions.
 typedef struct pos_stack_node_s {
-    fpos_t *pos;
+    apos_t *pos;
     struct pos_stack_node_s *down;
 } pos_stack_node_t;
 typedef struct {
@@ -92,7 +93,7 @@ pos_stack_t *new_pos_stack() {
     return stack;
 }
 
-void push(pos_stack_t *stack, fpos_t *pos) {
+void push(pos_stack_t *stack, apos_t *pos) {
     if (NULL == stack) {
         fprintf(stderr, "Cannot operate on null stack. Exiting.\n");
         exit(1);
@@ -125,7 +126,7 @@ void pop(pos_stack_t *stack) {
     free(top);
 }
 
-fpos_t *peek(pos_stack_t *stack) {
+apos_t *peek(pos_stack_t *stack) {
     if (NULL == stack) {
         fprintf(stderr, "Cannot operate on null stack. Exiting.\n");
         exit(1);
@@ -152,9 +153,9 @@ void free_pos_stack(pos_stack_t *stack) {
 
 // Seek forward in the file until the closing bracket
 // matching the opening bracket at the current position in the file.
-void bracket_jump(FILE* prog) {
+void bracket_jump(abstract_file* prog) {
     int opening_brackets = 1;  // the one we just read
-    for (int c = fgetc(prog); c != EOF; c = fgetc(prog)) {
+    for (int c = abs_fgetc(prog); c != EOF; c = abs_fgetc(prog)) {
         switch(c) {
             case OPEN:
                 opening_brackets++;
@@ -171,9 +172,9 @@ void bracket_jump(FILE* prog) {
     exit(1);
 }
 
-int check_brackets(FILE* prog, char *error_msg) {
+int check_brackets(abstract_file* prog, char *error_msg) {
     int bracket_level = 0;
-    for (int c = fgetc(prog); c != EOF; c = fgetc(prog)) {
+    for (int c = abs_fgetc(prog); c != EOF; c = abs_fgetc(prog)) {
         switch(c) {
             case OPEN:
                 bracket_level++;
@@ -185,7 +186,7 @@ int check_brackets(FILE* prog, char *error_msg) {
         if (bracket_level < 0)
             break;
     }
-    rewind(prog);
+    abs_rewind(prog);
     if (bracket_level < 0) {
         strcpy(error_msg, "Error: unmatched closing bracket!\n");
     } else if (bracket_level > 0) {
@@ -200,7 +201,7 @@ typedef enum {
     NOOP,
 } eof_mode_t;
 
-void eval(FILE* prog, eof_mode_t eof_mode) {
+void eval(abstract_file* prog, eof_mode_t eof_mode) {
     {
         char error[100];
         if (!check_brackets(prog, error)) {
@@ -212,7 +213,7 @@ void eval(FILE* prog, eof_mode_t eof_mode) {
     node_t *pos = make_node();
     pos_stack_t *pos_stack = new_pos_stack();
 
-    for (int c = fgetc(prog); c != EOF; c = fgetc(prog)) {
+    for (int c = abs_fgetc(prog); c != EOF; c = abs_fgetc(prog)) {
         switch(c) {
             case LEFT:
                 pos = left(pos);
@@ -252,19 +253,19 @@ void eval(FILE* prog, eof_mode_t eof_mode) {
                 if (0 == pos->val) {
                     bracket_jump(prog);
                 } else  {
-                    fpos_t *curr_pos = malloc(sizeof(fpos_t));
+                    apos_t *curr_pos = malloc(sizeof(apos_t));
                     if (NULL == curr_pos) {
-                        fprintf(stderr, "Error allocating for fpos_t.\n");
+                        fprintf(stderr, "Error allocating memory for apos_t\n");
                         exit(1);
                     }
-                    fgetpos(prog, curr_pos);
+                    abs_fgetpos(prog, curr_pos);
                     push(pos_stack, curr_pos);
                 }
                 break;
             case CLOSE:
                 if (pos->val != 0) {
-                    fpos_t *new_pos = peek(pos_stack);
-                    fsetpos(prog, new_pos);
+                    apos_t *new_pos = peek(pos_stack);
+                    abs_fsetpos(prog, new_pos);
                 } else {
                     pop(pos_stack);
                 }
@@ -273,6 +274,34 @@ void eval(FILE* prog, eof_mode_t eof_mode) {
     }
     free_tape(pos);
     free_pos_stack(pos_stack);
+}
+
+int eval_file(const char *filename, eof_mode_t eof_mode) {
+    FILE *program = fopen(filename, "r");
+    if (NULL == program) {
+        fprintf(stderr, "Error opening program file.\n");
+        return 1;
+    }
+
+    abstract_file *program_wrapped = open_real_file(program);
+
+    eval(program_wrapped, eof_mode);
+
+    free(program_wrapped);
+    program_wrapped = NULL;
+
+    if (fclose(program)) {
+        fprintf(stderr, "Error closing program file.\n");
+        return 1;
+    }
+    return 0;
+}
+
+int eval_str(const char *str, eof_mode_t eof_mode) {
+    abstract_file *program = open_char_arr(str);
+    eval(program, eof_mode);
+    free(program);
+    return 0;
 }
 
 int main(int argc, char *argv[]) {
@@ -296,16 +325,5 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    FILE *program = fopen(argv[1], "r");
-    if (NULL == program) {
-        fprintf(stderr, "Error opening program file.\n");
-        return 1;
-    }
-
-    eval(program, eof_mode);
-
-    if (fclose(program)) {
-        fprintf(stderr, "Error closing program file.\n");
-        return 1;
-    }
+    return eval_file(argv[1], eof_mode);
 }
