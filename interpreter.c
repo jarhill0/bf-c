@@ -1,4 +1,4 @@
-/* A BF intepreter.
+/* A BF interpreter.
  *
  * Date: May 2019
  */
