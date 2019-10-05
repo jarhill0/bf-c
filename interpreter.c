@@ -12,7 +12,8 @@
     "Options:\n" \
     "\t-z\tInput a zero on EOF (default behavior)\n" \
     "\t-o\tInput a negative one on EOF\n" \
-    "\t-n\tDo nothing on EOF (preserve existing value)\n"
+    "\t-n\tDo nothing on EOF (preserve existing value)\n\n" \
+    "\t-b\tBenchmark program (count number of instructions executed)\n\n"
 
 // symbolic constants for BF program characters
 #define LEFT '<'
@@ -201,7 +202,7 @@ typedef enum {
     NOOP,
 } eof_mode_t;
 
-void eval(abstract_file* prog, eof_mode_t eof_mode) {
+void eval(abstract_file* prog, eof_mode_t eof_mode, int benchmark) {
     {
         char error[100];
         if (!check_brackets(prog, error)) {
@@ -212,8 +213,10 @@ void eval(abstract_file* prog, eof_mode_t eof_mode) {
 
     node_t *pos = make_node();
     pos_stack_t *pos_stack = new_pos_stack();
+    long long int instr_count = 0;
 
     for (int c = abs_fgetc(prog); c != EOF; c = abs_fgetc(prog)) {
+        instr_count++;
         switch(c) {
             case LEFT:
                 pos = left(pos);
@@ -270,13 +273,18 @@ void eval(abstract_file* prog, eof_mode_t eof_mode) {
                     pop(pos_stack);
                 }
                 break;
+            default:
+                instr_count--;  // comments don't count as instructions...
         }
     }
+    if (benchmark)
+        printf("\n%lld instructions executed.\n", instr_count);
+
     free_tape(pos);
     free_pos_stack(pos_stack);
 }
 
-int eval_file(const char *filename, eof_mode_t eof_mode) {
+int eval_file(const char *filename, eof_mode_t eof_mode, int benchmark) {
     FILE *program = fopen(filename, "r");
     if (NULL == program) {
         fprintf(stderr, "Error opening program file.\n");
@@ -285,7 +293,7 @@ int eval_file(const char *filename, eof_mode_t eof_mode) {
 
     abstract_file *program_wrapped = open_real_file(program);
 
-    eval(program_wrapped, eof_mode);
+    eval(program_wrapped, eof_mode, benchmark);
 
     free(program_wrapped);
     program_wrapped = NULL;
@@ -297,9 +305,9 @@ int eval_file(const char *filename, eof_mode_t eof_mode) {
     return 0;
 }
 
-int eval_str(const char *str, eof_mode_t eof_mode) {
+int eval_str(const char *str, eof_mode_t eof_mode, int benchmark) {
     abstract_file *program = open_char_arr(str);
-    eval(program, eof_mode);
+    eval(program, eof_mode, benchmark);
     free(program);
     return 0;
 }
@@ -311,19 +319,37 @@ int main(int argc, char *argv[]) {
     }
 
     eof_mode_t eof_mode = ZERO;
+    int benchmark = 0;
     for (int i = 2; i < argc; i++) {
-        if (strcmp(argv[i], "-z") == 0)
-            eof_mode = ZERO;
-        else if (strcmp(argv[i], "-o") == 0)
-            eof_mode = NEG_ONE;
-        else if (strcmp(argv[i], "-n") == 0)
-            eof_mode = NOOP;
-        else {
+        if (argv[i][0] == '-') {
+            for (int j = 1; argv[i][j]; j++) {
+                char c = argv[i][j];
+                switch(c) {
+                    case 'z':
+                        eof_mode = ZERO;
+                        break;
+                    case 'o':
+                        eof_mode = NEG_ONE;
+                        break;
+                    case 'n':
+                        eof_mode = NOOP;
+                        break;
+                    case 'b':
+                        benchmark = 1;
+                        break;
+                    default:
+                        fprintf(stderr, "Unknown option '%c'\n", c);
+                        fprintf(stderr, USAGE, argv[0]);
+                        return 1;
+                        break;
+                }
+            }
+        } else {
             fprintf(stderr, "Unknown option '%s'\n", argv[i]);
             fprintf(stderr, USAGE, argv[0]);
             return 1;
         }
     }
 
-    return eval_file(argv[1], eof_mode);
+    return eval_file(argv[1], eof_mode, benchmark);
 }
